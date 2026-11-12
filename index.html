@@ -111,7 +111,7 @@ const KAKAO_KEY = "72d4cdde208e89436118e80476ee9dfc";
    열 이름: 이름 | 주소 | 소개 | 태그 | 추천메뉴 | 방문일 | 사진
    태그는 쉼표나 / 로 구분 (예: 산속 뷰, 산장 분위기)
    ========================================================= */
-const DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQTqFShMQogUpKif7STbwwm5CrBisG6I56Stk3f0m4c7SFpJYrHwrgMyWdRfgiq08F0v536mvRtP2uU/pubhtml?gid=1701920625&single=true";
+const DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQTqFShMQogUpKif7STbwwm5CrBisG6I56Stk3f0m4c7SFpJYrHwrgMyWdRfgiq08F0v536mvRtP2uU/pub?gid=1701920625&single=true&output=csv";
 
 /* ---------------- 이 아래는 수정하지 않아도 돼요 ---------------- */
 const $ = id => document.getElementById(id);
@@ -145,11 +145,24 @@ function decode(buf){
 const COLS = { name:["이름","카페","카페 이름","name"], address:["주소","address"], intro:["소개","특징","intro"],
   tags:["태그","tags"], menu:["추천메뉴","추천 메뉴","메뉴","menu"], visited:["방문일","방문","visited"], photo:["사진","photo"] };
 
+// 구글 시트 주소를 어떤 형태로 넣어도 CSV 주소로 바꿔 줌
+function toCsvUrl(u){
+  u = u.trim();
+  if (!u.includes("docs.google.com/spreadsheets")) return u;
+  if (/\/d\/e\//.test(u)) // '웹에 게시' 주소 (pubhtml, pub 등)
+    return u.replace(/\/pub(html)?(\?.*)?$/, "/pub?output=csv").replace(/\/pubhtml\/.*$/, "/pub?output=csv");
+  const m = u.match(/\/d\/([\w-]+)/); // 편집 주소 (링크가 있는 모든 사용자 보기 권한 필요)
+  return m ? `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv` : u;
+}
+
 async function loadCafes(){
-  const url = DATA_URL + (DATA_URL.includes("?") ? "&" : "?") + "t=" + Date.now(); // 항상 최신 내용
+  const base = toCsvUrl(DATA_URL);
+  const url = base + (base.includes("?") ? "&" : "?") + "t=" + Date.now(); // 항상 최신 내용
   const res = await fetch(url);
   if (!res.ok) throw new Error(res.status);
-  const rows = parseCSV(decode(await res.arrayBuffer()).replace(/^﻿/, ""));
+  const text = decode(await res.arrayBuffer()).replace(/^﻿/, "");
+  if (/^\s*</.test(text)) throw new Error("html"); // CSV가 아니라 웹페이지가 옴
+  const rows = parseCSV(text);
   const head = rows.shift().map(h => h.trim());
   const idx = k => head.findIndex(h => COLS[k].includes(h));
   return rows.map(r => {
@@ -177,7 +190,8 @@ if (!KAKAO_KEY || KAKAO_KEY.includes("여기에")) {
 async function init(){
   map = new kakao.maps.Map($("map"), { center: new kakao.maps.LatLng(37.37, 128.39), level: 9 });
   try { CAFES = await loadCafes(); }
-  catch(e){ return notice("<b>카페 목록 파일을 읽지 못했어요.</b><br><br><code>cafes.csv</code>가 <code>index.html</code>과 같은 폴더에 있는지, 구글 시트 주소라면 '웹에 게시'를 CSV로 했는지 확인해 주세요."); }
+  catch(e){ if (e.message === "html") return notice("<b>시트 주소가 CSV가 아니에요.</b><br><br>구글 시트에서 <b>파일 → 공유 → 웹에 게시</b>를 열고, 형식을 <b>쉼표로 구분된 값(.csv)</b>으로 골라 게시한 뒤 나온 주소를 넣어 주세요.");
+    return notice("<b>카페 목록 파일을 읽지 못했어요.</b><br><br><code>cafes.csv</code>가 <code>index.html</code>과 같은 폴더에 있는지, 구글 시트 주소라면 '웹에 게시'를 CSV로 했는지 확인해 주세요."); }
   if (!CAFES.length) return notice("<b>목록에 카페가 없어요.</b><br><br>첫 줄은 열 이름(이름, 주소, 소개, 태그…)이고, 둘째 줄부터 카페를 적어 주세요. 이름과 주소는 꼭 필요해요.");
   const geocoder = new kakao.maps.services.Geocoder();
   const places = new kakao.maps.services.Places();
