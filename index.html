@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3b2a20">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>나의 카페 지도</title>
+<style>
+  /* =========================================================
+     🔑 1. 아래 KAKAO_KEY 자리에 JavaScript 키를 넣으세요
+     ☕ 2. CAFES 목록에 카페를 추가하세요 (script 맨 위)
+     ========================================================= */
+  :root{
+    --bean:#3b2a20; --crema:#c8a27a; --milk:#faf6f1; --foam:#fff;
+    --ink:#2a211b; --muted:#8a7a6d; --line:#eadfd3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;color:var(--ink);background:var(--milk)}
+  #map{position:fixed;inset:0}
+
+  /* 상단 바 */
+  header{position:fixed;top:0;left:0;right:0;z-index:10;padding:calc(env(safe-area-inset-top) + 12px) 14px 10px;
+    background:linear-gradient(to bottom,rgba(250,246,241,.97) 70%,rgba(250,246,241,0))}
+  .title{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .title h1{font-size:19px;font-weight:800;letter-spacing:-.3px;color:var(--bean)}
+  .title h1 span{color:var(--crema)}
+  .toggle{border:1px solid var(--line);background:var(--foam);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;color:var(--bean)}
+  .chips{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:none;border:1px solid var(--line);background:var(--foam);border-radius:999px;padding:7px 12px;font-size:13px;color:var(--ink);white-space:nowrap}
+  .chip.on{background:var(--bean);border-color:var(--bean);color:#fff}
+
+  /* 지도 위 이름표 */
+  .pin{transform:translateY(-6px);background:var(--bean);color:#fff;font-size:12px;font-weight:700;padding:6px 10px;border-radius:999px;
+    box-shadow:0 3px 10px rgba(0,0,0,.25);white-space:nowrap;position:relative;cursor:pointer}
+  .pin::after{content:"";position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--bean);border-bottom:0}
+  .pin.active{background:var(--crema);color:var(--bean)}
+  .pin.active::after{border-top-color:var(--crema)}
+
+  /* 하단 카드 */
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--foam);border-radius:20px 20px 0 0;
+    box-shadow:0 -6px 24px rgba(0,0,0,.15);padding:10px 18px calc(env(safe-area-inset-bottom) + 18px);
+    transform:translateY(110%);transition:transform .28s ease}
+  .sheet.open{transform:translateY(0)}
+  .grab{width:38px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 12px}
+  .sheet .photo{width:100%;height:170px;object-fit:cover;border-radius:14px;margin-bottom:12px;background:var(--line)}
+  .sheet h2{font-size:20px;font-weight:800;letter-spacing:-.4px;color:var(--bean)}
+  .sheet .addr{font-size:13px;color:var(--muted);margin:4px 0 10px}
+  .sheet .intro{font-size:15px;line-height:1.55;margin-bottom:10px}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .tag{font-size:12px;background:var(--milk);color:var(--bean);border:1px solid var(--line);padding:4px 9px;border-radius:999px}
+  .meta{font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6}
+  .actions{display:flex;gap:8px}
+  .btn{flex:1;text-align:center;text-decoration:none;padding:12px;border-radius:12px;font-size:14px;font-weight:700}
+  .btn.main{background:#fee500;color:#191919}
+  .btn.sub{background:var(--milk);color:var(--bean);border:1px solid var(--line)}
+  .close{position:absolute;top:12px;right:14px;border:0;background:none;font-size:22px;color:var(--muted)}
+
+  /* 목록 보기 */
+  .list{position:fixed;inset:0;z-index:15;background:var(--milk);overflow-y:auto;padding:calc(env(safe-area-inset-top) + 110px) 14px 30px;display:none}
+  .list.open{display:block}
+  .item{background:var(--foam);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:center}
+  .item img{width:64px;height:64px;border-radius:12px;object-fit:cover;flex:none;background:var(--line)}
+  .item .ph{width:64px;height:64px;border-radius:12px;flex:none;background:var(--milk);display:grid;place-items:center;font-size:26px}
+  .item h3{font-size:16px;font-weight:800;color:var(--bean)}
+  .item p{font-size:13px;color:var(--muted);margin-top:3px}
+  .empty{text-align:center;color:var(--muted);padding:40px 0;font-size:14px}
+
+  /* 안내 메시지 */
+  .notice{position:fixed;inset:0;z-index:50;display:none;place-items:center;padding:24px;background:var(--milk)}
+  .notice.show{display:grid}
+  .notice div{max-width:360px;background:var(--foam);border:1px solid var(--line);border-radius:18px;padding:22px;line-height:1.6;font-size:14px}
+  .notice b{color:var(--bean)}
+  .notice code{background:var(--milk);padding:1px 5px;border-radius:5px;font-size:13px}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<header>
+  <div class="title">
+    <h1>☕ 나의 <span>카페</span> 지도</h1>
+    <button class="toggle" id="toggle">목록 보기</button>
+  </div>
+  <div class="chips" id="chips"></div>
+</header>
+
+<div class="list" id="list"></div>
+
+<div class="sheet" id="sheet">
+  <button class="close" id="close" aria-label="닫기">×</button>
+  <div class="grab"></div>
+  <div id="sheetBody"></div>
+</div>
+
+<div class="notice" id="notice"><div id="noticeText"></div></div>
+
+<script>
+/* =========================================================
+   🔑 카카오 JavaScript 키 (따옴표 안에 붙여넣기)
+   ========================================================= */
+const KAKAO_KEY = "72d4cdde208e89436118e80476ee9dfc";
+
+/* =========================================================
+   ☕ 카페 목록 파일
+   - 기본값: 같은 폴더의 cafes.csv (엑셀로 열고 고치면 돼요)
+   - 구글 시트를 쓰려면: 시트의 '웹에 게시' CSV 주소를 붙여넣기
+     예) "https://docs.google.com/spreadsheets/d/e/....../pub?output=csv"
+   열 이름: 이름 | 주소 | 소개 | 태그 | 추천메뉴 | 방문일 | 사진
+   태그는 쉼표나 / 로 구분 (예: 산속 뷰, 산장 분위기)
+   ========================================================= */
+const DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQTqFShMQogUpKif7STbwwm5CrBisG6I56Stk3f0m4c7SFpJYrHwrgMyWdRfgiq08F0v536mvRtP2uU/pubhtml?gid=1701920625&single=true";
+
+/* ---------------- 이 아래는 수정하지 않아도 돼요 ---------------- */
+const $ = id => document.getElementById(id);
+let map, activeTag = "전체", selected = null, CAFES = [];
+const placed = []; // {cafe, pos, overlay, el}
+
+// CSV 읽기 (따옴표·줄바꿈 포함 칸 지원)
+function parseCSV(text){
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (q){
+      if (c === '"' && text[i+1] === '"'){ cell += '"'; i++; }
+      else if (c === '"') q = false;
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if (c !== "\r") cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(v => v.trim()));
+}
+
+// 엑셀이 UTF-8 / 한글(CP949) 어느 쪽으로 저장해도 읽기
+function decode(buf){
+  const utf = new TextDecoder("utf-8").decode(buf);
+  return utf.includes("�") ? new TextDecoder("euc-kr").decode(buf) : utf;
+}
+
+const COLS = { name:["이름","카페","카페 이름","name"], address:["주소","address"], intro:["소개","특징","intro"],
+  tags:["태그","tags"], menu:["추천메뉴","추천 메뉴","메뉴","menu"], visited:["방문일","방문","visited"], photo:["사진","photo"] };
+
+async function loadCafes(){
+  const url = DATA_URL + (DATA_URL.includes("?") ? "&" : "?") + "t=" + Date.now(); // 항상 최신 내용
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(res.status);
+  const rows = parseCSV(decode(await res.arrayBuffer()).replace(/^﻿/, ""));
+  const head = rows.shift().map(h => h.trim());
+  const idx = k => head.findIndex(h => COLS[k].includes(h));
+  return rows.map(r => {
+    const get = k => { const i = idx(k); return i < 0 ? "" : (r[i] || "").trim(); };
+    return { name:get("name"), address:get("address"), intro:get("intro"),
+      tags:get("tags").split(/[,\/#]/).map(t => t.trim()).filter(Boolean),
+      menu:get("menu"), visited:get("visited"), photo:get("photo") };
+  }).filter(c => c.name && c.address);
+}
+
+function notice(html){ $("noticeText").innerHTML = html; $("notice").classList.add("show"); }
+
+if (!KAKAO_KEY || KAKAO_KEY.includes("여기에")) {
+  notice("<b>카카오 키가 아직 없어요.</b><br><br>이 파일을 메모장(또는 VS Code)으로 열고 <code>여기에_JavaScript_키</code> 자리에 카카오 개발자 사이트의 <b>JavaScript 키</b>를 붙여넣은 뒤 저장하세요.");
+} else if (location.protocol === "file:") {
+  notice("<b>파일을 더블클릭으로 열면 지도가 뜨지 않아요.</b><br><br>카카오맵은 등록한 주소에서만 열려요. <code>http://localhost:8080</code> 으로 열어 주세요. (방법은 안내받은 대로!)");
+} else {
+  const s = document.createElement("script");
+  s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&libraries=services&autoload=false`;
+  s.onload = () => kakao.maps.load(init);
+  s.onerror = () => notice("<b>카카오맵을 불러오지 못했어요.</b><br><br>확인할 것<br>① JavaScript 키가 맞는지<br>② [카카오맵] → [사용 설정]이 ON인지<br>③ JavaScript SDK 도메인에 지금 주소(<code>" + location.origin + "</code>)가 등록됐는지");
+  document.head.appendChild(s);
+}
+
+async function init(){
+  map = new kakao.maps.Map($("map"), { center: new kakao.maps.LatLng(37.37, 128.39), level: 9 });
+  try { CAFES = await loadCafes(); }
+  catch(e){ return notice("<b>카페 목록 파일을 읽지 못했어요.</b><br><br><code>cafes.csv</code>가 <code>index.html</code>과 같은 폴더에 있는지, 구글 시트 주소라면 '웹에 게시'를 CSV로 했는지 확인해 주세요."); }
+  if (!CAFES.length) return notice("<b>목록에 카페가 없어요.</b><br><br>첫 줄은 열 이름(이름, 주소, 소개, 태그…)이고, 둘째 줄부터 카페를 적어 주세요. 이름과 주소는 꼭 필요해요.");
+  const geocoder = new kakao.maps.services.Geocoder();
+  const places = new kakao.maps.services.Places();
+  const bounds = new kakao.maps.LatLngBounds();
+  let done = 0;
+
+  CAFES.forEach(cafe => {
+    const finish = pos => {
+      if (pos) { addPin(cafe, pos); bounds.extend(pos); }
+      if (++done === CAFES.length) {
+        if (placed.length > 1) map.setBounds(bounds, 120, 40, 60, 40);
+        else if (placed.length === 1) { map.setCenter(placed[0].pos); map.setLevel(6); }
+        renderChips(); renderList();
+      }
+    };
+    geocoder.addressSearch(cafe.address, (r, st) => {
+      if (st === kakao.maps.services.Status.OK) return finish(new kakao.maps.LatLng(r[0].y, r[0].x));
+      // 주소로 못 찾으면 카페 이름으로 한 번 더 검색
+      places.keywordSearch(cafe.name, (r2, st2) => {
+        finish(st2 === kakao.maps.services.Status.OK ? new kakao.maps.LatLng(r2[0].y, r2[0].x) : null);
+        if (st2 !== kakao.maps.services.Status.OK) console.warn("위치를 못 찾았어요:", cafe.name);
+      });
+    });
+  });
+
+  kakao.maps.event.addListener(map, "click", closeSheet);
+}
+
+function addPin(cafe, pos){
+  const el = document.createElement("div");
+  el.className = "pin"; el.textContent = cafe.name;
+  el.addEventListener("click", e => { e.stopPropagation(); select(cafe); });
+  const overlay = new kakao.maps.CustomOverlay({ position: pos, content: el, yAnchor: 1, map });
+  placed.push({ cafe, pos, overlay, el });
+}
+
+function select(cafe){
+  const p = placed.find(x => x.cafe === cafe); if (!p) return;
+  placed.forEach(x => x.el.classList.toggle("active", x === p));
+  selected = p;
+  map.panTo(p.pos);
+  const lat = p.pos.getLat(), lng = p.pos.getLng();
+  const enc = encodeURIComponent;
+  $("sheetBody").innerHTML = `
+    ${cafe.photo ? `<img class="photo" src="${cafe.photo}" alt="">` : ""}
+    <h2>${cafe.name}</h2>
+    <div class="addr">${cafe.address}</div>
+    <div class="intro">${cafe.intro || ""}</div>
+    <div class="tags">${(cafe.tags||[]).map(t=>`<span class="tag">#${t}</span>`).join("")}</div>
+    ${(cafe.menu||cafe.visited) ? `<div class="meta">${cafe.menu?`☕ 추천 메뉴 · ${cafe.menu}<br>`:""}${cafe.visited?`📅 방문 · ${cafe.visited}`:""}</div>` : ""}
+    <div class="actions">
+      <a class="btn main" href="https://map.kakao.com/link/to/${enc(cafe.name)},${lat},${lng}" target="_blank">길찾기</a>
+      <a class="btn sub" href="https://map.kakao.com/link/search/${enc(cafe.name)}" target="_blank">카카오맵에서 보기</a>
+    </div>`;
+  $("list").classList.remove("open"); $("toggle").textContent = "목록 보기";
+  $("sheet").classList.add("open");
+}
+
+function closeSheet(){
+  $("sheet").classList.remove("open");
+  placed.forEach(x => x.el.classList.remove("active"));
+  selected = null;
+}
+
+function visible(cafe){ return activeTag === "전체" || (cafe.tags||[]).includes(activeTag); }
+
+function renderChips(){
+  const tags = ["전체", ...new Set(CAFES.flatMap(c => c.tags || []))];
+  $("chips").innerHTML = tags.map(t => `<button class="chip ${t===activeTag?"on":""}" data-t="${t}">${t==="전체"?"전체":"#"+t}</button>`).join("");
+  $("chips").querySelectorAll(".chip").forEach(b => b.onclick = () => {
+    activeTag = b.dataset.t; closeSheet();
+    placed.forEach(p => p.overlay.setMap(visible(p.cafe) ? map : null));
+    renderChips(); renderList();
+  });
+}
+
+function renderList(){
+  const shown = placed.filter(p => visible(p.cafe));
+  $("list").innerHTML = shown.length ? shown.map((p,i) => `
+    <div class="item" data-i="${placed.indexOf(p)}">
+      ${p.cafe.photo ? `<img src="${p.cafe.photo}" alt="">` : `<div class="ph">☕</div>`}
+      <div><h3>${p.cafe.name}</h3><p>${p.cafe.intro||""}</p><p>${(p.cafe.tags||[]).map(t=>"#"+t).join(" ")}</p></div>
+    </div>`).join("") : `<div class="empty">이 태그의 카페가 아직 없어요</div>`;
+  $("list").querySelectorAll(".item").forEach(el => el.onclick = () => select(placed[el.dataset.i].cafe));
+}
+
+$("toggle").onclick = () => {
+  const open = $("list").classList.toggle("open");
+  $("toggle").textContent = open ? "지도 보기" : "목록 보기";
+  if (open) closeSheet();
+};
+$("close").onclick = closeSheet;
+</script>
+</body>
+</html>
