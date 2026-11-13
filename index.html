@@ -175,8 +175,8 @@ function parseCSV(text){
 
 // 엑셀이 UTF-8 / 한글(CP949) 어느 쪽으로 저장해도 읽기
 function decode(buf){
-  const utf = new TextDecoder("utf-8").decode(buf);
-  return utf.includes(" ") ? new TextDecoder("euc-kr").decode(buf) : utf;
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(buf); }
+  catch(_) { return new TextDecoder("euc-kr").decode(buf); }
 }
 
 const COLS = { name:["이름","카페","카페 이름","name"], address:["주소","address"], intro:["소개","특징","intro"],
