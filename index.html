@@ -20,7 +20,7 @@
   #map{position:fixed;inset:0}
 
   /* 상단 바 */
-  header{position:fixed;top:0;left:0;right:0;z-index:10;padding:calc(env(safe-area-inset-top) + 12px) 14px 10px;
+  header{position:fixed;top:0;left:0;right:0;z-index:16;padding:calc(env(safe-area-inset-top) + 12px) 14px 10px;
     background:linear-gradient(to bottom,rgba(250,246,241,.97) 70%,rgba(250,246,241,0))}
   .title{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
   .title h1{font-size:19px;font-weight:800;letter-spacing:-.3px;color:var(--bean)}
@@ -37,6 +37,29 @@
   .pin::after{content:"";position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--bean);border-bottom:0}
   .pin.active{background:var(--crema);color:var(--bean)}
   .pin.active::after{border-top-color:var(--crema)}
+
+  /* 가고 싶은 곳 핀: 흰 바탕 + 점선 테두리 + 별 */
+  .pin.wish{background:#fff;color:#c2410c;border:2px dashed #f97316;padding:4px 9px}
+  .pin.wish::after{border-top-color:#f97316}
+  .pin.wish.active{background:#f97316;color:#fff;border-style:solid}
+
+  /* 갔던 곳 / 가고 싶은 곳 전환 */
+  .seg{display:flex;background:#efe6dc;border-radius:12px;padding:3px;margin-bottom:9px}
+  .seg button{flex:1;border:0;background:none;padding:8px 4px;border-radius:9px;font-size:13px;font-weight:700;color:var(--muted)}
+  .seg button.on{background:var(--foam);color:var(--bean);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+  .badge{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;margin-bottom:8px}
+  .badge.been{background:var(--bean);color:#fff}
+  .badge.wish{background:#fff7ed;color:#c2410c;border:1px dashed #f97316}
+
+  /* 다녀왔어요 버튼 */
+  .visit{width:100%;border:0;border-radius:12px;padding:13px;margin-bottom:8px;font-size:15px;font-weight:800;background:var(--bean);color:#fff}
+  .visit:disabled{opacity:.6}
+  .pinbox{display:none;gap:8px;margin-bottom:8px}
+  .pinbox.show{display:flex}
+  .pinbox input{flex:1;min-width:0;border:1px solid var(--line);border-radius:12px;padding:12px;font-size:16px}
+  .pinbox button{border:0;border-radius:12px;padding:0 18px;font-weight:800;background:var(--bean);color:#fff}
+  .msg{font-size:13px;margin-bottom:8px;min-height:0}
+  .msg.err{color:#b91c1c} .msg.ok{color:#15803d}
 
   /* 하단 카드 */
   .sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--foam);border-radius:20px 20px 0 0;
@@ -58,7 +81,7 @@
   .close{position:absolute;top:12px;right:14px;border:0;background:none;font-size:22px;color:var(--muted)}
 
   /* 목록 보기 */
-  .list{position:fixed;inset:0;z-index:15;background:var(--milk);overflow-y:auto;padding:calc(env(safe-area-inset-top) + 110px) 14px 30px;display:none}
+  .list{position:fixed;inset:0;z-index:15;background:var(--milk);overflow-y:auto;padding:calc(env(safe-area-inset-top) + 155px) 14px 30px;display:none}
   .list.open{display:block}
   .item{background:var(--foam);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:center}
   .item img{width:64px;height:64px;border-radius:12px;object-fit:cover;flex:none;background:var(--line)}
@@ -84,6 +107,11 @@
     <h1>☕ 나의 <span>카페</span> 지도</h1>
     <button class="toggle" id="toggle">목록 보기</button>
   </div>
+  <div class="seg" id="seg">
+    <button data-s="all" class="on">전체</button>
+    <button data-s="been">☕ 가봤어요</button>
+    <button data-s="wish">☆ 가고 싶어요</button>
+  </div>
   <div class="chips" id="chips"></div>
 </header>
 
@@ -108,14 +136,23 @@ const KAKAO_KEY = "72d4cdde208e89436118e80476ee9dfc";
    - 기본값: 같은 폴더의 cafes.csv (엑셀로 열고 고치면 돼요)
    - 구글 시트를 쓰려면: 시트의 '웹에 게시' CSV 주소를 붙여넣기
      예) "https://docs.google.com/spreadsheets/d/e/....../pub?output=csv"
-   열 이름: 이름 | 주소 | 소개 | 태그 | 추천메뉴 | 방문일 | 사진
+   열 이름: 이름 | 주소 | 소개 | 태그 | 추천메뉴 | 방문일 | 사진 | 상태
    태그는 쉼표나 / 로 구분 (예: 산속 뷰, 산장 분위기)
+   상태: "가봄" 또는 "가고싶음" (비워 두면 '가봄'으로 표시)
    ========================================================= */
 const DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQTqFShMQogUpKif7STbwwm5CrBisG6I56Stk3f0m4c7SFpJYrHwrgMyWdRfgiq08F0v536mvRtP2uU/pub?gid=1701920625&single=true&output=csv";
 
+/* =========================================================
+   ✓ '다녀왔어요' 버튼용 Apps Script 웹 앱 주소
+   (https://script.google.com/macros/s/....../exec)
+   넣으면: 버튼으로 시트를 바로 고치고, 목록도 대기 없이 최신으로 읽어요
+   비워 두면: 버튼 없이 DATA_URL만 사용
+   ========================================================= */
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzvg-ZI1-IadiD4gPQ-cGDw4f99DqSaAXHD13Xj9oPlhdGUiIh5LiCaAiWYYFfOeupd/exec";
+
 /* ---------------- 이 아래는 수정하지 않아도 돼요 ---------------- */
 const $ = id => document.getElementById(id);
-let map, activeTag = "전체", selected = null, CAFES = [];
+let map, activeTag = "전체", activeStatus = "all", selected = null, CAFES = [];
 const placed = []; // {cafe, pos, overlay, el}
 
 // CSV 읽기 (따옴표·줄바꿈 포함 칸 지원)
@@ -139,11 +176,15 @@ function parseCSV(text){
 // 엑셀이 UTF-8 / 한글(CP949) 어느 쪽으로 저장해도 읽기
 function decode(buf){
   const utf = new TextDecoder("utf-8").decode(buf);
-  return utf.includes("�") ? new TextDecoder("euc-kr").decode(buf) : utf;
+  return utf.includes(" ") ? new TextDecoder("euc-kr").decode(buf) : utf;
 }
 
 const COLS = { name:["이름","카페","카페 이름","name"], address:["주소","address"], intro:["소개","특징","intro"],
-  tags:["태그","tags"], menu:["추천메뉴","추천 메뉴","메뉴","menu"], visited:["방문일","방문","visited"], photo:["사진","photo"] };
+  tags:["태그","tags"], menu:["추천메뉴","추천 메뉴","메뉴","menu"], visited:["방문일","방문","visited"], photo:["사진","photo"],
+  status:["상태","구분","status"] };
+
+// "가고싶음", "가고 싶은 곳", "위시", "찜" 등은 모두 가고 싶은 곳으로
+const isWish = s => /가고|싶|위시|wish|찜|예정|안\s*가/i.test(s || "");
 
 // 구글 시트 주소를 어떤 형태로 넣어도 CSV 주소로 바꿔 줌
 function toCsvUrl(u){
@@ -155,13 +196,19 @@ function toCsvUrl(u){
   return m ? `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv` : u;
 }
 
-async function loadCafes(){
-  const base = toCsvUrl(DATA_URL);
+async function fetchCsv(base){
   const url = base + (base.includes("?") ? "&" : "?") + "t=" + Date.now(); // 항상 최신 내용
   const res = await fetch(url);
   if (!res.ok) throw new Error(res.status);
   const text = decode(await res.arrayBuffer()).replace(/^﻿/, "");
   if (/^\s*</.test(text)) throw new Error("html"); // CSV가 아니라 웹페이지가 옴
+  return text;
+}
+
+async function loadCafes(){
+  let text;
+  if (SCRIPT_URL) { try { text = await fetchCsv(SCRIPT_URL); } catch(e){ console.warn("Apps Script 읽기 실패, DATA_URL 사용", e); } }
+  if (!text) text = await fetchCsv(toCsvUrl(DATA_URL));
   const rows = parseCSV(text);
   const head = rows.shift().map(h => h.trim());
   const idx = k => head.findIndex(h => COLS[k].includes(h));
@@ -169,7 +216,7 @@ async function loadCafes(){
     const get = k => { const i = idx(k); return i < 0 ? "" : (r[i] || "").trim(); };
     return { name:get("name"), address:get("address"), intro:get("intro"),
       tags:get("tags").split(/[,\/#]/).map(t => t.trim()).filter(Boolean),
-      menu:get("menu"), visited:get("visited"), photo:get("photo") };
+      menu:get("menu"), visited:get("visited"), photo:get("photo"), wish:isWish(get("status")) };
   }).filter(c => c.name && c.address);
 }
 
@@ -222,7 +269,8 @@ async function init(){
 
 function addPin(cafe, pos){
   const el = document.createElement("div");
-  el.className = "pin"; el.textContent = cafe.name;
+  el.className = "pin" + (cafe.wish ? " wish" : "");
+  el.textContent = (cafe.wish ? "☆ " : "☕ ") + cafe.name;
   el.addEventListener("click", e => { e.stopPropagation(); select(cafe); });
   const overlay = new kakao.maps.CustomOverlay({ position: pos, content: el, yAnchor: 1, map });
   placed.push({ cafe, pos, overlay, el });
@@ -237,17 +285,61 @@ function select(cafe){
   const enc = encodeURIComponent;
   $("sheetBody").innerHTML = `
     ${cafe.photo ? `<img class="photo" src="${cafe.photo}" alt="">` : ""}
+    <span class="badge ${cafe.wish ? "wish" : "been"}">${cafe.wish ? "☆ 가고 싶은 곳" : "☕ 가봤어요" + (cafe.visited ? " · " + cafe.visited : "")}</span>
     <h2>${cafe.name}</h2>
     <div class="addr">${cafe.address}</div>
     <div class="intro">${cafe.intro || ""}</div>
     <div class="tags">${(cafe.tags||[]).map(t=>`<span class="tag">#${t}</span>`).join("")}</div>
-    ${(cafe.menu||cafe.visited) ? `<div class="meta">${cafe.menu?`☕ 추천 메뉴 · ${cafe.menu}<br>`:""}${cafe.visited?`📅 방문 · ${cafe.visited}`:""}</div>` : ""}
+    ${cafe.menu ? `<div class="meta">${cafe.wish ? "👀 먹어 보고 싶은 메뉴" : "☕ 추천 메뉴"} · ${cafe.menu}</div>` : ""}
+    ${cafe.wish && SCRIPT_URL ? `
+      <button class="visit" id="visitBtn">✓ 다녀왔어요</button>
+      <div class="pinbox" id="pinBox"><input id="pinIn" type="password" inputmode="numeric" placeholder="비밀번호" autocomplete="off"><button id="pinOk">확인</button></div>
+      <div class="msg" id="visitMsg"></div>` : ""}
     <div class="actions">
       <a class="btn main" href="https://map.kakao.com/link/to/${enc(cafe.name)},${lat},${lng}" target="_blank">길찾기</a>
       <a class="btn sub" href="https://map.kakao.com/link/search/${enc(cafe.name)}" target="_blank">카카오맵에서 보기</a>
     </div>`;
   $("list").classList.remove("open"); $("toggle").textContent = "목록 보기";
   $("sheet").classList.add("open");
+  if ($("visitBtn")) {
+    $("visitBtn").onclick = () => { const pin = savedPin(); pin ? markVisited(p, pin) : askPin(); };
+    $("pinOk").onclick = () => { const v = $("pinIn").value.trim(); if (v) markVisited(p, v); };
+    $("pinIn").onkeydown = e => { if (e.key === "Enter") $("pinOk").click(); };
+  }
+}
+
+// 비밀번호는 이 기기 브라우저에만 기억 (다음부터는 안 물어봄)
+function savedPin(){ try { return localStorage.getItem("cafeMapPin") || ""; } catch(_) { return ""; } }
+function savePin(v){ try { v ? localStorage.setItem("cafeMapPin", v) : localStorage.removeItem("cafeMapPin"); } catch(_) {} }
+function askPin(text){
+  $("pinBox").classList.add("show"); $("pinIn").value = ""; $("pinIn").focus();
+  setMsg(text || "처음 한 번만 비밀번호를 입력해 주세요.", text ? "err" : "");
+}
+function setMsg(t, cls){ const m = $("visitMsg"); if (m) { m.textContent = t; m.className = "msg " + (cls || ""); } }
+
+async function markVisited(p, pin){
+  const btn = $("visitBtn"); btn.disabled = true; btn.textContent = "저장 중…"; setMsg("");
+  try {
+    const res = await fetch(SCRIPT_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ pin, name: p.cafe.name }) });
+    const r = await res.json();
+    if (r.ok) {
+      savePin(pin);
+      p.cafe.wish = false; p.cafe.visited = r.visited;
+      p.el.className = "pin active"; p.el.textContent = "☕ " + p.cafe.name;
+      select(p.cafe); renderList();
+      placed.forEach(x => x.overlay.setMap(visible(x.cafe) ? map : null));
+      if (!visible(p.cafe)) closeSheet();
+      return;
+    }
+    btn.disabled = false; btn.textContent = "✓ 다녀왔어요";
+    if (r.error === "pin") { savePin(""); askPin("비밀번호가 맞지 않아요. 다시 입력해 주세요."); }
+    else if (r.error === "notfound") setMsg("시트에서 이 카페 이름을 찾지 못했어요.", "err");
+    else setMsg("저장하지 못했어요. 잠시 후 다시 시도해 주세요.", "err");
+  } catch(e) {
+    btn.disabled = false; btn.textContent = "✓ 다녀왔어요";
+    setMsg("연결에 실패했어요. SCRIPT_URL 주소와 배포 설정(액세스: 모든 사용자)을 확인해 주세요.", "err");
+  }
 }
 
 function closeSheet(){
@@ -256,15 +348,28 @@ function closeSheet(){
   selected = null;
 }
 
-function visible(cafe){ return activeTag === "전체" || (cafe.tags||[]).includes(activeTag); }
+function visible(cafe){
+  const okStatus = activeStatus === "all" || (activeStatus === "wish") === cafe.wish;
+  return okStatus && (activeTag === "전체" || (cafe.tags||[]).includes(activeTag));
+}
+
+function refresh(){
+  closeSheet();
+  placed.forEach(p => p.overlay.setMap(visible(p.cafe) ? map : null));
+  renderChips(); renderList();
+}
+
+$("seg").querySelectorAll("button").forEach(b => b.onclick = () => {
+  activeStatus = b.dataset.s;
+  $("seg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+  refresh();
+});
 
 function renderChips(){
   const tags = ["전체", ...new Set(CAFES.flatMap(c => c.tags || []))];
   $("chips").innerHTML = tags.map(t => `<button class="chip ${t===activeTag?"on":""}" data-t="${t}">${t==="전체"?"전체":"#"+t}</button>`).join("");
   $("chips").querySelectorAll(".chip").forEach(b => b.onclick = () => {
-    activeTag = b.dataset.t; closeSheet();
-    placed.forEach(p => p.overlay.setMap(visible(p.cafe) ? map : null));
-    renderChips(); renderList();
+    activeTag = b.dataset.t; refresh();
   });
 }
 
@@ -272,9 +377,10 @@ function renderList(){
   const shown = placed.filter(p => visible(p.cafe));
   $("list").innerHTML = shown.length ? shown.map((p,i) => `
     <div class="item" data-i="${placed.indexOf(p)}">
-      ${p.cafe.photo ? `<img src="${p.cafe.photo}" alt="">` : `<div class="ph">☕</div>`}
-      <div><h3>${p.cafe.name}</h3><p>${p.cafe.intro||""}</p><p>${(p.cafe.tags||[]).map(t=>"#"+t).join(" ")}</p></div>
-    </div>`).join("") : `<div class="empty">이 태그의 카페가 아직 없어요</div>`;
+      ${p.cafe.photo ? `<img src="${p.cafe.photo}" alt="">` : `<div class="ph">${p.cafe.wish ? "☆" : "☕"}</div>`}
+      <div><span class="badge ${p.cafe.wish ? "wish" : "been"}" style="margin-bottom:4px">${p.cafe.wish ? "☆ 가고 싶은 곳" : "☕ 가봤어요"}</span>
+        <h3>${p.cafe.name}</h3><p>${p.cafe.intro||""}</p><p>${(p.cafe.tags||[]).map(t=>"#"+t).join(" ")}</p></div>
+    </div>`).join("") : `<div class="empty">조건에 맞는 카페가 아직 없어요</div>`;
   $("list").querySelectorAll(".item").forEach(el => el.onclick = () => select(placed[el.dataset.i].cafe));
 }
 
